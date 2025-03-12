@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SMC Documentation Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>SMC Documentation Assistant</h1>
+        <div class="chat-container">
+            <div id="chat-history"></div>
+            <div class="input-container">
+                <input type="text" id="user-input" placeholder="Ask about SMC devices...">
+                <button id="send-button">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('send-button').addEventListener('click', sendMessage);
+        document.getElementById('user-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function sendMessage() {
+            const input = document.getElementById('user-input');
+            const query = input.value.trim();
+            
+            if (query) {
+                // Add user message to chat
+                addMessageToChat('user', query);
+                input.value = '';
+                
+                // Add loading message
+                const loadingId = addMessageToChat('assistant', 'Searching documentation...');
+                
+                // Send request to backend
+                fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ query: query })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Remove loading message
+                    document.getElementById(loadingId).remove();
+                    
+                    // Format answer with sources
+                    let answerHtml = data.answer;
+                    answerHtml += '<div class="sources">';
+                    data.sources.forEach(source => {
+                        answerHtml += `<div class="source">Source: ${source.document}, Page ${source.page}</div>`;
+                    });
+                    answerHtml += '</div>';
+                    
+                    // Add assistant message to chat
+                    addMessageToChat('assistant', answerHtml);
+                })
+                .catch(error => {
+                    // Remove loading message
+                    document.getElementById(loadingId).remove();
+                    addMessageToChat('assistant', 'Sorry, there was an error processing your request.');
+                    console.error('Error:', error);
+                });
+            }
+        }
+
+        function addMessageToChat(sender, content) {
+            const chatHistory = document.getElementById('chat-history');
+            const messageId = 'msg-' + Date.now();
+            const messageDiv = document.createElement('div');
+            messageDiv.id = messageId;
+            messageDiv.className = `message ${sender}-message`;
+            messageDiv.innerHTML = content;
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            return messageId;
+        }
+    </script>
+</body>
+</html>
