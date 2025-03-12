@@ -1,7 +1,6 @@
 # qa_system.py
 import os
 import chromadb
-import openai
 from dotenv import load_dotenv
 import json
 
@@ -28,9 +27,6 @@ def get_relevant_context(query, n_results=3):
         })
     
     return context
-
-# Option 1: OpenAI API (easier but requires API key)
-def answer_with_openai(query, context):
     """Generate an answer using OpenAI API with retrieved context."""
     openai.api_key = os.getenv("OPENAI_API_KEY")
     context_text = "\n\n".join([f"Document: {ctx['source']}, Page: {ctx['page']}\n{ctx['content']}" 
@@ -93,7 +89,7 @@ def answer_with_local_llm(query, context):
         response = requests.post(
             "http://localhost:11434/api/generate",
             json={
-                "model": "phi3-mini",  # Can be changed to other models like mistral, llama3 etc.
+                "model": "phi4",  # Can be changed to other models like mistral, llama3 etc.
                 "prompt": prompt,
                 "stream": False,
                 "options": {
@@ -101,7 +97,7 @@ def answer_with_local_llm(query, context):
                     "num_predict": 500
                 }
             },
-            timeout=30
+            timeout=120
         )
         
         if response.status_code == 200:
@@ -120,10 +116,7 @@ if __name__ == "__main__":
     # Choose which method to use
     qa_method = os.getenv("QA_METHOD", "simple").lower()
     
-    if qa_method == "openai" and os.getenv("OPENAI_API_KEY"):
-        print("Using OpenAI for answering...")
-        answer, context = answer_with_openai(test_query, get_relevant_context(test_query))
-    elif qa_method == "local":
+    if qa_method == "local":
         print("Using local LLM for answering...")
         answer, context = answer_with_local_llm(test_query, get_relevant_context(test_query))
     else:
