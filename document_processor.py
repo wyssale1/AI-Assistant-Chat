@@ -1,40 +1,55 @@
-# enhanced_pdf_extractor.py
+# document_processor.py
+"""
+Unified document processing module for SMC Documentation Q&A System.
+Handles PDF extraction, OCR, table detection, and document chunking.
+"""
 import os
-import pickle
 import re
 import io
+import pickle
 import tempfile
 from PIL import Image
+import pandas as pd
 
-# Import PDF processing libraries
+# Import configuration
+from config import (
+    DOCS_DIR, PROCESSED_DIR, CHUNK_SIZE, CHUNK_OVERLAP,
+    EXTRACT_IMAGES, IMAGE_MIN_SIZE, OCR_ENABLED
+)
+
+# Import chunking from langchain
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+# PDF processing libraries
 try:
     import fitz  # PyMuPDF
 except ImportError:
-    print("Warning: PyMuPDF not found. Installing...")
-    os.system("pip install pymupdf==1.22.5")
-    import fitz
+    raise ImportError("PyMuPDF (fitz) is required. Install with: pip install pymupdf")
 
+# OCR libraries
+if OCR_ENABLED:
+    try:
+        import pytesseract
+        from pdf2image import convert_from_path
+    except ImportError:
+        raise ImportError("OCR dependencies missing. Install with: pip install pytesseract pdf2image")
+    
+    # Check if Tesseract is installed
+    try:
+        pytesseract.get_tesseract_version()
+    except Exception:
+        print("WARNING: Tesseract not found. OCR features will be disabled.")
+        OCR_ENABLED = False
+
+# Table extraction
 try:
-    import pytesseract
-    from pdf2image import convert_from_path
+    import tabula
 except ImportError:
-    print("Warning: OCR dependencies not found. Installing...")
-    os.system("pip install pytesseract==0.3.10 pdf2image==1.16.3")
-    import pytesseract
-    from pdf2image import convert_from_path
+    print("WARNING: tabula-py not found. Table extraction will be disabled.")
+    tabula = None
 
-# Check if Tesseract is installed
-try:
-    pytesseract.get_tesseract_version()
-except Exception as e:
-    print("Warning: Tesseract not found or not properly installed.")
-    print("Please install Tesseract using: brew install tesseract")
 
-# Configure image extraction parameters
-IMAGE_MIN_SIZE = 100  # Minimum width/height to extract
-EXTRACT_IMAGES = True  # Set to False if you only want text
-
-def extract_text_with_layout(pdf_path):
+def extract_text_with_layout(pdf_path, verbose=True):
     """Extract text with layout awareness and image processing from PDF."""
     documents = []
     filename = os.path.basename(pdf_path)
@@ -50,8 +65,9 @@ def extract_text_with_layout(pdf_path):
                 html = page.get_text("html")  # Get HTML for structure preservation
                 
                 # If text extraction yields little or no text, try OCR
-                if len(text.strip()) < 50:  # Arbitrary threshold for "too little text"
-                    print(f"  Page {i+1} has limited text, trying OCR...")
+                if OCR_ENABLED and len(text.strip()) < 50:  # Arbitrary threshold for "too little text"
+                    if verbose:
+                        print(f"  Page {i+1} has limited text, trying OCR...")
                     text = ocr_page(pdf_path, i)
                 
                 # Extract images if enabled
@@ -66,15 +82,17 @@ def extract_text_with_layout(pdf_path):
                         img_data, bbox = img_info
                         
                         # Try to OCR text from the image
-                        try:
-                            img_pil = Image.open(io.BytesIO(img_data))
-                            img_text = pytesseract.image_to_string(img_pil)
-                            
-                            if img_text.strip():
-                                image_texts.append(img_text)
-                                image_descriptions.append(f"[Image {i+1}.{img_index+1}: {img_text[:50]}...]")
-                        except Exception as e:
-                            print(f"  Image OCR error on page {i+1}, image {img_index+1}: {str(e)}")
+                        if OCR_ENABLED:
+                            try:
+                                img_pil = Image.open(io.BytesIO(img_data))
+                                img_text = pytesseract.image_to_string(img_pil)
+                                
+                                if img_text.strip():
+                                    image_texts.append(img_text)
+                                    image_descriptions.append(f"[Image {i+1}.{img_index+1}: {img_text[:50]}...]")
+                            except Exception as e:
+                                if verbose:
+                                    print(f"  Image OCR error on page {i+1}, image {img_index+1}: {str(e)}")
                 
                 # Combine all content
                 combined_text = text
@@ -99,10 +117,12 @@ def extract_text_with_layout(pdf_path):
                     }
                 })
                 
-                print(f"  Processed page {i+1}: {len(combined_text)} chars, {len(image_descriptions)} images")
+                if verbose:
+                    print(f"  Processed page {i+1}: {len(combined_text)} chars, {len(image_descriptions)} images")
                 
             except Exception as e:
-                print(f"  Error processing page {i+1}: {str(e)}")
+                if verbose:
+                    print(f"  Error processing page {i+1}: {str(e)}")
                 documents.append({
                     "content": f"[PDF PROCESSING ERROR: {str(e)}]",
                     "metadata": {
@@ -113,7 +133,8 @@ def extract_text_with_layout(pdf_path):
                 })
         
     except Exception as e:
-        print(f"  Failed to process PDF: {str(e)}")
+        if verbose:
+            print(f"  Failed to process PDF: {str(e)}")
         documents.append({
             "content": f"[FAILED TO PROCESS PDF: {str(e)}]",
             "metadata": {
@@ -124,6 +145,7 @@ def extract_text_with_layout(pdf_path):
         })
     
     return documents
+
 
 def extract_images_from_page(page):
     """Extract images from a PDF page."""
@@ -150,6 +172,7 @@ def extract_images_from_page(page):
             print(f"  Error extracting image: {str(e)}")
     
     return image_list
+
 
 def extract_headings_from_html(html_content):
     """Extract headings from HTML content based on font size and styling."""
@@ -183,8 +206,12 @@ def extract_headings_from_html(html_content):
     
     return headings
 
+
 def ocr_page(pdf_path, page_num):
     """Perform OCR on a specific page of a PDF."""
+    if not OCR_ENABLED:
+        return "[OCR is disabled]"
+        
     try:
         # Convert PDF page to image
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -204,8 +231,82 @@ def ocr_page(pdf_path, page_num):
     except Exception as e:
         return f"[OCR ERROR: {str(e)}]"
 
-def process_directory(directory_path):
-    """Process all PDFs in a directory."""
+
+def extract_tables_from_pdf(pdf_path, verbose=True):
+    """Extract tables from PDF using tabula-py."""
+    if tabula is None:
+        return []
+        
+    filename = os.path.basename(pdf_path)
+    tables_data = []
+    
+    try:
+        # Use tabula-py to find and extract tables
+        if verbose:
+            print(f"Extracting tables from {filename}...")
+        tables = tabula.read_pdf(pdf_path, pages='all', multiple_tables=True)
+        
+        if not tables:
+            if verbose:
+                print(f"  No tables found in {filename}")
+            return tables_data
+        
+        if verbose:
+            print(f"  Found {len(tables)} potential tables")
+        
+        # Process each table
+        for i, table in enumerate(tables):
+            if table.empty:
+                continue
+                
+            # Convert the table to a string representation
+            table_str = table.to_string()
+            
+            # Store table data with metadata
+            tables_data.append({
+                "content": f"TABLE CONTENT:\n{table_str}",
+                "metadata": {
+                    "source": filename,
+                    "table_index": i,
+                    "type": "table",
+                    "columns": list(table.columns),
+                    "rows": len(table)
+                }
+            })
+            
+            if verbose:
+                print(f"  Processed table {i+1}: {len(table)} rows, {len(table.columns)} columns")
+            
+    except Exception as e:
+        if verbose:
+            print(f"  Error extracting tables from {filename}: {str(e)}")
+    
+    return tables_data
+
+
+def chunk_documents(documents):
+    """Split documents into smaller chunks for better retrieval."""
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        separators=["\n\n", "\n", ".", " ", ""]
+    )
+    
+    chunked_documents = []
+    
+    for doc in documents:
+        chunks = text_splitter.split_text(doc["content"])
+        for chunk in chunks:
+            chunked_documents.append({
+                "content": chunk,
+                "metadata": doc["metadata"]
+            })
+    
+    return chunked_documents
+
+
+def process_directory(directory_path=DOCS_DIR, verbose=True):
+    """Process all PDFs in a directory, extracting text, tables, and chunking."""
     all_documents = []
     processed_files = 0
     failed_files = 0
@@ -225,15 +326,25 @@ def process_directory(directory_path):
     for filename in pdf_files:
         file_path = os.path.join(directory_path, filename)
         print(f"Processing {filename}...")
+        
         try:
-            documents = extract_text_with_layout(file_path)
-            if documents:
-                all_documents.extend(documents)
-                print(f"  Successfully extracted {len(documents)} document chunks")
+            # Extract text and layout
+            documents = extract_text_with_layout(file_path, verbose=verbose)
+            
+            # Extract tables
+            tables = extract_tables_from_pdf(file_path, verbose=verbose)
+            
+            # Combine all extracted content
+            combined_docs = documents + tables
+            
+            if combined_docs:
+                all_documents.extend(combined_docs)
+                print(f"  Successfully extracted {len(documents)} document chunks and {len(tables)} tables")
                 processed_files += 1
             else:
                 print(f"  No content extracted from {filename}")
                 failed_files += 1
+                
         except Exception as e:
             print(f"  Failed to process {filename}: {str(e)}")
             failed_files += 1
@@ -241,14 +352,17 @@ def process_directory(directory_path):
     print(f"Processing complete: {processed_files} files processed successfully, {failed_files} files failed")
     
     # Save the extracted documents
-    os.makedirs("processed_docs", exist_ok=True)
-    with open("processed_docs/extracted_docs.pkl", "wb") as f:
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+    
+    with open(os.path.join(PROCESSED_DIR, "extracted_docs.pkl"), "wb") as f:
         pickle.dump(all_documents, f)
     
-    return all_documents
-
-if __name__ == "__main__":
-    docs_dir = "docs"
-    all_docs = process_directory(docs_dir)
-    print(f"Extracted {len(all_docs)} document chunks")
-    print(f"Saved to processed_docs/extracted_docs.pkl")
+    # Create chunks
+    chunked_docs = chunk_documents(all_documents)
+    
+    with open(os.path.join(PROCESSED_DIR, "chunked_docs.pkl"), "wb") as f:
+        pickle.dump(chunked_docs, f)
+    
+    print(f"Created {len(chunked_docs)} chunks from {len(all_documents)} documents/tables")
+    
+    return chunked_docs
