@@ -149,11 +149,13 @@
                 // Store for feedback
                 lastQuery = query;
                 
-                // Add user message to chat
-                addMessageToChat('user', query);
+                // Clear input immediately to prevent double-sending
                 userInput.value = '';
                 
-                // Add loading message
+                // Add user message to chat
+                addMessageToChat('user', query);
+                
+                // Add loading message with a unique ID
                 const loadingId = addMessageToChat('assistant', 
                     '<div class="loading-message">' +
                     '<div class="dot-elastic"></div>' +
@@ -169,10 +171,18 @@
                     },
                     body: JSON.stringify({ query: query })
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Server responded with status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
-                    // Remove loading message
-                    document.getElementById(loadingId).remove();
+                    // IMPORTANT: First remove the loading message by ID
+                    const loadingElement = document.getElementById(loadingId);
+                    if (loadingElement) {
+                        loadingElement.remove();
+                    }
                     
                     // Store answer for feedback
                     lastAnswer = data.answer;
@@ -180,9 +190,9 @@
                     // Format answer with sources
                     let answerHtml = formatAnswer(data.answer);
                     
-                    // Add source references
+                    // Only add sources if they're not already in the answer
                     if (data.sources && data.sources.length > 0) {
-                        answerHtml += formatSources(data.sources);
+                        answerHtml += formatSources(data.sources, data.answer);
                     }
                     
                     // Add timing information if available
@@ -197,12 +207,17 @@
                     showFeedbackOptions();
                 })
                 .catch(error => {
-                    // Remove loading message
-                    document.getElementById(loadingId).remove();
+                    // Make sure to remove the loading message even on error
+                    const loadingElement = document.getElementById(loadingId);
+                    if (loadingElement) {
+                        loadingElement.remove();
+                    }
+                    
+                    // Add error message to chat
                     addMessageToChat('assistant', 
                         '<div class="error-message">' +
                         '<i class="fas fa-exclamation-circle"></i> ' +
-                        'Sorry, there was an error processing your request.' +
+                        `Sorry, there was an error processing your request: ${error.message}` +
                         '</div>'
                     );
                     console.error('Error:', error);
@@ -213,13 +228,18 @@
         // Add a message to the chat history
         function addMessageToChat(sender, content) {
             const chatHistory = document.getElementById('chat-history');
-            const messageId = 'msg-' + Date.now();
+            const messageId = 'msg-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
             const messageDiv = document.createElement('div');
             messageDiv.id = messageId;
             messageDiv.className = `message ${sender}-message`;
             messageDiv.innerHTML = content;
             chatHistory.appendChild(messageDiv);
-            chatHistory.scrollTop = chatHistory.scrollHeight;
+            
+            // Make sure to scroll to the bottom after adding content
+            setTimeout(() => {
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }, 10);
+            
             return messageId;
         }
 
@@ -261,31 +281,36 @@
             return formatted;
         }
 
-        // Format sources for display
-        function formatSources(sources) {
+        // Format sources for display with deduplication
+        function formatSources(sources, answer) {
+            // Skip adding sources if they're already in the answer
+            if (answer.includes("**Sources:**") || answer.includes("Sources:")) {
+                return "";
+            }
+            
+            // Create source list with deduplication
+            const uniqueSources = {};
+            sources.forEach(source => {
+                const key = source.document;
+                if (!uniqueSources[key]) {
+                    uniqueSources[key] = new Set();
+                }
+                uniqueSources[key].add(source.page);
+            });
+            
             let sourcesHtml = '<div class="sources">';
             sourcesHtml += '<div class="sources-title">Sources:</div>';
             
-            // Group by document
-            const groupedSources = {};
-            sources.forEach(source => {
-                if (!groupedSources[source.document]) {
-                    groupedSources[source.document] = [];
-                }
-                groupedSources[source.document].push(source);
-            });
-            
-            // Create source list
-            for (const [document, docSources] of Object.entries(groupedSources)) {
+            // Create source list with unique pages
+            for (const [document, pageSet] of Object.entries(uniqueSources)) {
                 sourcesHtml += `<div class="source-document">${document}</div>`;
                 sourcesHtml += '<ul class="source-pages">';
                 
-                docSources.forEach(source => {
-                    let sourceInfo = `Page ${source.page}`;
-                    if (source.section) {
-                        sourceInfo += ` - ${source.section}`;
-                    }
-                    sourcesHtml += `<li>${sourceInfo}</li>`;
+                // Convert Set to Array and sort numerically for consistent order
+                const sortedPages = Array.from(pageSet).sort((a, b) => a - b);
+                
+                sortedPages.forEach(page => {
+                    sourcesHtml += `<li>Page ${page}</li>`;
                 });
                 
                 sourcesHtml += '</ul>';

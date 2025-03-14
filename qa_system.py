@@ -129,12 +129,11 @@ Your task is to answer the user's question about SMC devices by carefully analyz
 INSTRUCTION GUIDELINES:
 1. Answer ONLY based on the information in the provided context excerpts
 2. If the answer isn't in the context, say "I don't have enough information about that in the documentation."
-3. VERY IMPORTANT: When citing sources, ONLY use the exact page numbers as provided in the context excerpts
+3. When including information from an excerpt, cite it as ([document], Page [number]) inline
 4. Each excerpt is clearly marked with "START EXCERPT FROM [document], PAGE [number]"
-5. When including information from an excerpt, cite it as ([document], Page [number])
-6. The context may include both text and image descriptions
-7. Be direct and concise in your answers
-8. When providing steps or procedures, use numbered lists
+5. DO NOT add a separate "Sources:" section at the end of your answer - this will be added automatically
+6. Be direct and concise in your answers
+7. When providing steps or procedures, use numbered lists
 
 CONTEXT:
 {context_text}
@@ -290,7 +289,12 @@ def answer_with_local_llm(query, context=None):
 
 def post_process_answer(answer, context):
     """Clean up and improve the LLM's answer."""
-    # Create a mapping of source document to pages
+    # Check if the answer already has a sources section (added by the LLM despite instructions)
+    if "**Sources:**" in answer or "*Sources:*" in answer or "Sources:" in answer:
+        # If sources are already mentioned, don't add them again
+        return answer
+    
+    # Create a mapping of source document to pages (with deduplication)
     source_pages = {}
     for ctx in context:
         source = ctx['source']
@@ -299,15 +303,15 @@ def post_process_answer(answer, context):
             source_pages[source] = set()
         source_pages[source].add(page)
     
-    # Add a clean source summary at the end if not already present
-    if "**Sources:**" not in answer:
-        sources_summary = "\n\n**Sources:**"
-        for source, pages in source_pages.items():
-            sources_summary += f"\n**{source}**"
-            for page in sorted(pages):
-                sources_summary += f"\n* Page {page}"
-        
-        answer += sources_summary
+    # Add a clean source summary at the end
+    sources_summary = "\n\n**Sources:**"
+    for source, pages in source_pages.items():
+        sources_summary += f"\n**{source}**"
+        # Sort pages for consistent presentation
+        for page in sorted(pages):
+            sources_summary += f"\n* Page {page}"
+    
+    answer += sources_summary
     
     return answer
 
