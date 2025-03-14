@@ -210,7 +210,10 @@
                     // Make sure to remove the loading message even on error
                     const loadingElement = document.getElementById(loadingId);
                     if (loadingElement) {
-                        loadingElement.remove();
+                        loadingElement.innerHTML = answerHtml;
+                    } else {
+                        // Fallback: add as new message if loading element not found
+                        addMessageToChat('assistant', answerHtml);
                     }
                     
                     // Add error message to chat
