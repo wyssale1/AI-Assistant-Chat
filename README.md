@@ -39,7 +39,7 @@ The system creates a web-based question-answering interface that:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/smc-documentation-qa.git
+git clone https://github.com/wyssale1/smc-documentation-qa.git
 cd smc-documentation-qa
 
 # Run the setup script to install dependencies and pull models
