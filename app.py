@@ -1,15 +1,23 @@
 # app.py
-from flask import Flask, render_template, request, jsonify, Response
-from qa_system import answer_with_local_llm, get_relevant_context
+"""
+Flask web application for SMC Documentation Q&A System.
+"""
+from flask import Flask, render_template, request, jsonify
 import os
 import json
 import time
 import logging
 from dotenv import load_dotenv
 
+from qa_system import answer_with_local_llm, get_relevant_context
+from config import (
+    DEBUG_MODE, HOST, PORT, OLLAMA_MODEL, LLAVA_MODEL, 
+    LOG_LEVEL, COLLECTION_NAME
+)
+
 # Set up logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.FileHandler("app.log"), logging.StreamHandler()]
 )
@@ -21,17 +29,10 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
-# Configuration
-DEBUG_MODE = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
-HOST = os.getenv("HOST", "127.0.0.1")
-PORT = int(os.getenv("PORT", "5000"))
-
 @app.route('/')
 def index():
     """Render the main page."""
-    # Get model info for display
-    model_name = os.getenv("OLLAMA_MODEL", "phi4")
-    return render_template('index.html', model=model_name)
+    return render_template('index.html', model=OLLAMA_MODEL)
 
 @app.route('/ask', methods=['POST'])
 def ask():
@@ -100,13 +101,14 @@ def status():
             'system': 'online',
             'ollama': 'unknown',
             'vectordb': 'unknown',
-            'model': os.getenv("OLLAMA_MODEL", "phi4")
+            'chat_model': OLLAMA_MODEL,
+            'vision_model': LLAVA_MODEL
         }
         
         # Check ChromaDB
         try:
             client = chromadb.PersistentClient("./chroma_db")
-            collection = client.get_collection("smc_documentation")
+            collection = client.get_collection(COLLECTION_NAME)
             count = collection.count()
             status['vectordb'] = 'online'
             status['document_count'] = count
@@ -170,5 +172,7 @@ def feedback():
 
 if __name__ == '__main__':
     logger.info(f"Starting SMC Documentation Assistant on {HOST}:{PORT}")
-    logger.info(f"Using Ollama model: {os.getenv('OLLAMA_MODEL', 'phi4')}")
+    logger.info(f"Using Ollama model for chat: {OLLAMA_MODEL}")
+    logger.info(f"Using LLaVA model for document processing: {LLAVA_MODEL}")
+    logger.info(f"Vector database collection: {COLLECTION_NAME}")
     app.run(debug=DEBUG_MODE, host=HOST, port=PORT)

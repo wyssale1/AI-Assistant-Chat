@@ -1,22 +1,27 @@
-# SMC Documentation Q&A System with Local LLM
+# SMC Documentation Q&A System
 
-A powerful documentation assistant that helps technical support staff quickly find information in SMC product documentation using vector search and a local LLM integration via Ollama.
+A powerful documentation assistant that helps technical support staff quickly find information in SMC product documentation using LLaVA for preprocessing documents and Phi-4 for answering questions.
 
-## Overview
+## Architecture Overview
 
-This system creates a web-based question-answering interface that:
+This system leverages two AI models to create an intelligent PDF documentation system:
 
-1. Processes PDF documentation into searchable vector embeddings
-2. Retrieves relevant document chunks when queried
-3. Uses a local LLM (Phi-4 via Ollama) to generate accurate, contextual answers
-4. Provides source references so staff can verify information
-5. Offers a clean, user-friendly web interface
+1. **LLaVA**: Used for document pre-processing, particularly for analyzing images and diagrams in technical documents
+2. **Phi-4**: Used for the chat interface to answer user questions based on the processed documentation
+
+The system creates a web-based question-answering interface that:
+
+1. Pre-processes PDF documentation using LLaVA for enhanced image understanding
+2. Converts documents into searchable vector embeddings
+3. Retrieves relevant document chunks when queried
+4. Uses the Phi-4 model to generate accurate, contextual answers
+5. Provides source references so staff can verify information
 
 ## Features
 
-- **Advanced PDF Processing**: Extracts text with layout preservation, handles tables, and supports OCR for images
+- **Advanced PDF Processing**: Extracts text with layout preservation and uses LLaVA for image analysis
 - **Vector-Based Retrieval**: Uses ChromaDB and sentence transformers for semantic search
-- **Local LLM Integration**: Leverages Ollama to run Phi-4 locally for generating answers
+- **Local Model Integration**: Uses Ollama to run both LLaVA and Phi-4 locally
 - **Source Traceability**: All answers include references to source documents and page numbers
 - **Smart Caching**: Frequently asked questions are cached for faster response times
 - **User Feedback System**: Collects feedback to improve system performance
@@ -25,38 +30,23 @@ This system creates a web-based question-answering interface that:
 ## Requirements
 
 - Python 3.8+
-- Ollama (for running local LLM)
+- Ollama (for running LLaVA and Phi-4)
 - Tesseract OCR (optional, for better text extraction)
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Install Dependencies and Setup
 
 ```bash
-# Create and activate a virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Clone the repository
+git clone https://github.com/yourusername/smc-documentation-qa.git
+cd smc-documentation-qa
 
-# Install required packages
-pip install -r requirements.txt
+# Run the setup script to install dependencies and pull models
+python setup.py
 ```
 
-### 2. Install and Configure Ollama
-
-```bash
-# Install Ollama (macOS/Linux)
-curl -fsSL https://ollama.com/install.sh | sh
-
-# On Windows, download from: https://ollama.com/download/windows
-
-# Start the Ollama service
-ollama serve
-
-# Pull the Phi-4 model (in a new terminal)
-ollama pull phi4
-```
-
-### 3. Process Documentation
+### 2. Process Documentation
 
 ```bash
 # Place your PDF documentation in the 'docs' directory
@@ -65,7 +55,7 @@ ollama pull phi4
 python process_docs.py
 ```
 
-### 4. Start the Web Application
+### 3. Start the Web Application
 
 ```bash
 python app.py
@@ -73,25 +63,44 @@ python app.py
 
 Access the application at http://127.0.0.1:5000
 
+## Repository Structure
+
+```
+smc-documentation-qa/
+├── app.py                  # Web application (Flask)
+├── config.py               # Configuration settings
+├── document_processor.py   # LLaVA-enhanced document processor
+├── embeddings.py           # Vector embeddings generator
+├── process_docs.py         # Main processing pipeline
+├── qa_system.py            # Phi-4 question answering system
+├── setup.py                # Setup script for dependencies
+├── requirements.txt        # Python dependencies
+├── docs/                   # Place PDF documents here
+├── processed_docs/         # Processed document data
+├── chroma_db/              # Vector database
+├── response_cache/         # Cached responses
+├── feedback/               # User feedback storage
+├── logs/                   # Log files
+├── static/                 # Static web assets
+└── templates/              # HTML templates
+```
+
 ## Configuration
 
 The system can be configured through the `.env` file (automatically created on first run):
 
-### LLM Settings
+### LLaVA and Phi-4 Settings
 
 ```
-OLLAMA_URL=http://localhost:11434/api/generate
+# LLaVA for Document Pre-processing
+LLAVA_MODEL=llava
+LLAVA_TEMPERATURE=0.2
+
+# Phi-4 for Chat
 OLLAMA_MODEL=phi4
 LLM_TEMPERATURE=0.3
 LLM_MAX_TOKENS=1000
 ```
-
-You can change `OLLAMA_MODEL` to any model supported by Ollama, such as:
-- `phi4` (default, best balance of quality and speed)
-- `llama3`
-- `mistral`
-- `llama3:8b` (smaller model)
-- `mixtral`
 
 ### Retrieval Settings
 
@@ -110,29 +119,22 @@ PORT=5000
 LOG_LEVEL=INFO
 ```
 
-## Architecture
-
-The system consists of several components:
-
-1. **Document Processor**: Extracts and processes text from PDFs
-2. **Embeddings Engine**: Generates vector embeddings and manages the vector database
-3. **QA System**: Handles retrieval and LLM integration
-4. **Web Application**: Provides the user interface
-
 ## Advanced Usage
 
-### Using Other Models
+### Using Alternative Models
 
-While Phi-4 is the default model, you can use any model supported by Ollama:
+While the default configuration uses LLaVA for document processing and Phi-4 for chat, you can use any models supported by Ollama:
 
 ```bash
-# Pull another model
+# Pull alternative models
 ollama pull llama3
+ollama pull bakllava
 
 # Update your .env file
 echo "OLLAMA_MODEL=llama3" >> .env
+echo "LLAVA_MODEL=bakllava" >> .env
 
-# Restart the application
+# Restart the processing pipeline and application
 ```
 
 ### Processing Large Document Collections
@@ -148,20 +150,8 @@ CHUNK_OVERLAP=150
 
 - **PDF Extraction Issues**: Install Tesseract OCR for better text extraction
 - **Ollama Connection Error**: Ensure Ollama is running with `ps aux | grep ollama`
-- **Slow Responses**: Try using a smaller model like `phi4:mini` or reducing `SEARCH_TOP_K`
+- **Slow Responses**: Try using smaller models or reducing `SEARCH_TOP_K`
 - **Out of Memory**: Reduce `LLM_CONTEXT_WINDOW` or `CHUNK_SIZE` values
-
-## Logs and Debugging
-
-Logs are stored in the `logs` directory. To increase log verbosity:
-
-```
-LOG_LEVEL=DEBUG
-```
-
-## Feedback and Improvements
-
-The system collects user feedback through the UI. Feedback data is stored in the `feedback` directory for future improvements.
 
 ## License
 

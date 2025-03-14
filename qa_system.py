@@ -1,4 +1,7 @@
-# qa_system.py (updated with improved formatting and using config)
+# qa_system.py
+"""
+QA system for SMC Documentation using Phi-4 model via Ollama.
+"""
 import os
 import json
 import time
@@ -22,7 +25,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("qa_system")
 
-# Cache directory
+# Create cache directory if it doesn't exist
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 def get_relevant_context(query, n_results=SEARCH_TOP_K, rerank=True):
@@ -195,7 +198,7 @@ def save_to_cache(query, context, response):
 
 def answer_with_local_llm(query, context=None):
     """
-    Generate an answer using a locally running LLM with Ollama.
+    Generate an answer using the Phi-4 model via Ollama.
     
     Args:
         query: The user's question
@@ -312,7 +315,7 @@ if __name__ == "__main__":
     # Test the QA system
     test_query = "How do I reset the device?"
     
-    print("Testing Local LLM for answering...")
+    print("Testing Phi-4 for answering...")
     answer, context = answer_with_local_llm(test_query)
     
     print(f"Query: {test_query}")

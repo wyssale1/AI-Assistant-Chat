@@ -1,181 +1,117 @@
 # document_processor.py
 """
-Unified document processing module for SMC Documentation Q&A System.
-Handles PDF extraction, OCR, table detection, and document chunking.
+Document processor using LLaVA to extract text and analyze images from SMC documentation PDFs.
 """
 import os
-import re
+import fitz  # PyMuPDF
+import base64
+import requests
 import io
-import pickle
-import tempfile
 from PIL import Image
-import pandas as pd
+import pickle
+from tqdm import tqdm
+import logging
+import time
 
 # Import configuration
 from config import (
     DOCS_DIR, PROCESSED_DIR, CHUNK_SIZE, CHUNK_OVERLAP,
-    EXTRACT_IMAGES, IMAGE_MIN_SIZE, OCR_ENABLED
+    EXTRACT_IMAGES, IMAGE_MIN_SIZE, OCR_ENABLED,
+    LLAVA_URL, LLAVA_MODEL, LLAVA_TEMPERATURE, LLAVA_CONTEXT_SIZE
 )
 
 # Import chunking from langchain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# PDF processing libraries
-try:
-    import fitz  # PyMuPDF
-except ImportError:
-    raise ImportError("PyMuPDF (fitz) is required. Install with: pip install pymupdf")
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler("document_processor.log"), logging.StreamHandler()]
+)
+logger = logging.getLogger("document_processor")
 
-# OCR libraries
-if OCR_ENABLED:
+def encode_image_to_base64(image_bytes):
+    """Convert image bytes to base64 string for API."""
+    return base64.b64encode(image_bytes).decode('utf-8')
+
+def process_with_llava(image_bytes, surrounding_text="", page_num=0, source=""):
+    """Process an image using LLaVA with surrounding text for context."""
     try:
-        import pytesseract
-        from pdf2image import convert_from_path
-    except ImportError:
-        raise ImportError("OCR dependencies missing. Install with: pip install pytesseract pdf2image")
-    
-    # Check if Tesseract is installed
-    try:
-        pytesseract.get_tesseract_version()
-    except Exception:
-        print("WARNING: Tesseract not found. OCR features will be disabled.")
-        OCR_ENABLED = False
-
-# Table extraction
-try:
-    import tabula
-except ImportError:
-    print("WARNING: tabula-py not found. Table extraction will be disabled.")
-    tabula = None
-
-
-def extract_text_with_layout(pdf_path, verbose=True):
-    """Extract text with layout awareness and image processing from PDF."""
-    documents = []
-    filename = os.path.basename(pdf_path)
-    
-    try:
-        # Open the PDF with PyMuPDF
-        doc = fitz.open(pdf_path)
+        # Convert image bytes to base64
+        base64_image = encode_image_to_base64(image_bytes)
         
-        for i, page in enumerate(doc):
-            try:
-                # Extract text with layout preservation
-                text = page.get_text("text")
-                html = page.get_text("html")  # Get HTML for structure preservation
-                
-                # If text extraction yields little or no text, try OCR
-                if OCR_ENABLED and len(text.strip()) < 50:  # Arbitrary threshold for "too little text"
-                    if verbose:
-                        print(f"  Page {i+1} has limited text, trying OCR...")
-                    text = ocr_page(pdf_path, i)
-                
-                # Extract images if enabled
-                image_texts = []
-                image_descriptions = []
-                
-                if EXTRACT_IMAGES:
-                    # Get images from the page
-                    img_list = extract_images_from_page(page)
-                    
-                    for img_index, img_info in enumerate(img_list):
-                        img_data, bbox = img_info
-                        
-                        # Try to OCR text from the image
-                        if OCR_ENABLED:
-                            try:
-                                img_pil = Image.open(io.BytesIO(img_data))
-                                img_text = pytesseract.image_to_string(img_pil)
-                                
-                                if img_text.strip():
-                                    image_texts.append(img_text)
-                                    image_descriptions.append(f"[Image {i+1}.{img_index+1}: {img_text[:50]}...]")
-                            except Exception as e:
-                                if verbose:
-                                    print(f"  Image OCR error on page {i+1}, image {img_index+1}: {str(e)}")
-                
-                # Combine all content
-                combined_text = text
-                
-                # Add image descriptions if we have any
-                if image_descriptions:
-                    combined_text += "\n\nIMAGES ON THIS PAGE:\n" + "\n".join(image_descriptions)
-                
-                # Detect headings based on font size and styling (from HTML)
-                headings = extract_headings_from_html(html)
-                heading = headings[0] if headings else ""
-                
-                # Create the document entry
-                documents.append({
-                    "content": combined_text,
-                    "metadata": {
-                        "source": filename,
-                        "page": i + 1,
-                        "heading": heading,
-                        "has_images": len(image_descriptions) > 0,
-                        "image_count": len(image_descriptions)
-                    }
-                })
-                
-                if verbose:
-                    print(f"  Processed page {i+1}: {len(combined_text)} chars, {len(image_descriptions)} images")
-                
-            except Exception as e:
-                if verbose:
-                    print(f"  Error processing page {i+1}: {str(e)}")
-                documents.append({
-                    "content": f"[PDF PROCESSING ERROR: {str(e)}]",
-                    "metadata": {
-                        "source": filename,
-                        "page": i + 1,
-                        "heading": "ERROR_PAGE"
-                    }
-                })
+        # Create prompt with contextual information
+        prompt = f"""Analyze this technical image from an SMC device manual.
+Document: {source}
+Page: {page_num}
+Surrounding text: {surrounding_text[:LLAVA_CONTEXT_SIZE]}...
+
+Provide a detailed and technical description of what this image shows.
+Identify components, connections, and operational principles visible in the diagram.
+Be specific about part numbers, labels, and functional descriptions.
+"""
         
-    except Exception as e:
-        if verbose:
-            print(f"  Failed to process PDF: {str(e)}")
-        documents.append({
-            "content": f"[FAILED TO PROCESS PDF: {str(e)}]",
-            "metadata": {
-                "source": filename,
-                "page": 0,
-                "heading": "ERROR_DOCUMENT"
+        # Prepare request for Ollama API with LLaVA model
+        request_data = {
+            "model": LLAVA_MODEL,
+            "prompt": prompt,
+            "images": [base64_image],
+            "stream": False,
+            "options": {
+                "temperature": LLAVA_TEMPERATURE
             }
-        })
-    
-    return documents
-
-
-def extract_images_from_page(page):
-    """Extract images from a PDF page."""
-    image_list = []
-    
-    # Get image list from page
-    img_dict = page.get_images(full=True)
-    
-    for img_index, img_info in enumerate(img_dict):
-        xref = img_info[0]
+        }
         
-        try:
-            base_image = page.parent.extract_image(xref)
-            image_bytes = base_image["image"]
+        # Call LLaVA API
+        response = requests.post(
+            LLAVA_URL,
+            json=request_data,
+            timeout=60  # Longer timeout for image processing
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result.get("response", "Error: No response content")
+        else:
+            return f"Error: API returned status code {response.status_code}"
             
-            # Get image position on page
-            for img_rect in page.get_image_rects(xref):
-                bbox = (img_rect.x0, img_rect.y0, img_rect.x1, img_rect.y1)
-                
-            # Store the image and its position
-            image_list.append((image_bytes, bbox))
-            
-        except Exception as e:
-            print(f"  Error extracting image: {str(e)}")
-    
-    return image_list
+    except Exception as e:
+        logger.error(f"Error processing image: {str(e)}")
+        return f"Error processing image: {str(e)}"
 
+def extract_text_around_image(page, bbox, context_size=LLAVA_CONTEXT_SIZE):
+    """Extract text surrounding an image for context."""
+    # Get all text blocks on the page
+    blocks = page.get_text("blocks")
+    
+    # Filter blocks that are close to the image
+    nearby_blocks = []
+    for block in blocks:
+        block_bbox = block[:4]  # x0, y0, x1, y1
+        # Simple proximity check - expand image bbox slightly
+        expanded_bbox = (
+            bbox[0] - 20, bbox[1] - 20,
+            bbox[2] + 20, bbox[3] + 20
+        )
+        
+        # Check if block overlaps with expanded bbox
+        if (block_bbox[0] < expanded_bbox[2] and block_bbox[2] > expanded_bbox[0] and
+            block_bbox[1] < expanded_bbox[3] and block_bbox[3] > expanded_bbox[1]):
+            nearby_blocks.append(block[4])  # The text content is at index 4
+    
+    # Combine nearby text
+    context_text = " ".join(nearby_blocks)
+    
+    # Trim to context size
+    if len(context_text) > context_size:
+        context_text = context_text[:context_size] + "..."
+        
+    return context_text
 
 def extract_headings_from_html(html_content):
     """Extract headings from HTML content based on font size and styling."""
+    import re
     headings = []
     
     # Look for potential headings - text with large font size or bold formatting
@@ -206,13 +142,17 @@ def extract_headings_from_html(html_content):
     
     return headings
 
-
 def ocr_page(pdf_path, page_num):
     """Perform OCR on a specific page of a PDF."""
     if not OCR_ENABLED:
         return "[OCR is disabled]"
         
     try:
+        # Import required libraries
+        import pytesseract
+        from pdf2image import convert_from_path
+        import tempfile
+        
         # Convert PDF page to image
         with tempfile.TemporaryDirectory() as temp_dir:
             images = convert_from_path(
@@ -231,126 +171,180 @@ def ocr_page(pdf_path, page_num):
     except Exception as e:
         return f"[OCR ERROR: {str(e)}]"
 
-
-def extract_tables_from_pdf(pdf_path, verbose=True):
-    """Extract tables from PDF using tabula-py."""
-    if tabula is None:
-        return []
-        
+def extract_text_with_llava(pdf_path, verbose=True):
+    """Extract text and analyze images with LLaVA."""
+    documents = []
     filename = os.path.basename(pdf_path)
-    tables_data = []
     
     try:
-        # Use tabula-py to find and extract tables
-        if verbose:
-            print(f"Extracting tables from {filename}...")
-        tables = tabula.read_pdf(pdf_path, pages='all', multiple_tables=True)
+        # Open the PDF with PyMuPDF
+        doc = fitz.open(pdf_path)
         
-        if not tables:
-            if verbose:
-                print(f"  No tables found in {filename}")
-            return tables_data
-        
-        if verbose:
-            print(f"  Found {len(tables)} potential tables")
-        
-        # Process each table
-        for i, table in enumerate(tables):
-            if table.empty:
-                continue
+        for i, page in enumerate(doc):
+            try:
+                # Extract text with layout preservation
+                text = page.get_text("text")
+                html = page.get_text("html")  # Get HTML for structure preservation
                 
-            # Convert the table to a string representation
-            table_str = table.to_string()
-            
-            # Store table data with metadata
-            tables_data.append({
-                "content": f"TABLE CONTENT:\n{table_str}",
-                "metadata": {
-                    "source": filename,
-                    "table_index": i,
-                    "type": "table",
-                    "columns": list(table.columns),
-                    "rows": len(table)
-                }
-            })
-            
-            if verbose:
-                print(f"  Processed table {i+1}: {len(table)} rows, {len(table.columns)} columns")
-            
+                # If text extraction yields little or no text, try OCR
+                if OCR_ENABLED and len(text.strip()) < 50:  # Arbitrary threshold for "too little text"
+                    if verbose:
+                        logger.info(f"  Page {i+1} has limited text, trying OCR...")
+                    text = ocr_page(pdf_path, i)
+                
+                # Extract and analyze images if enabled
+                image_descriptions = []
+                
+                if EXTRACT_IMAGES:
+                    # Get images from the page
+                    img_list = page.get_images(full=True)
+                    
+                    for img_index, img_info in enumerate(img_list):
+                        try:
+                            xref = img_info[0]
+                            base_image = doc.extract_image(xref)
+                            image_bytes = base_image["image"]
+                            
+                            # Find image position
+                            image_bbox = None
+                            for img_rect in page.get_image_rects(xref):
+                                image_bbox = (img_rect.x0, img_rect.y0, img_rect.x1, img_rect.y1)
+                            
+                            # Get surrounding text for context
+                            surrounding_text = ""
+                            if image_bbox:
+                                surrounding_text = extract_text_around_image(page, image_bbox)
+                            
+                            # Process with LLaVA
+                            if verbose:
+                                logger.info(f"  Processing image {img_index+1} on page {i+1} with LLaVA...")
+                            
+                            image_description = process_with_llava(
+                                image_bytes,
+                                surrounding_text=surrounding_text,
+                                page_num=i+1,
+                                source=filename
+                            )
+                            
+                            image_descriptions.append(f"[Image {i+1}.{img_index+1}]: {image_description}")
+                            
+                        except Exception as e:
+                            if verbose:
+                                logger.error(f"  Error processing image {img_index+1} on page {i+1}: {str(e)}")
+                
+                # Combine all content
+                combined_text = text
+                
+                # Add image descriptions if we have any
+                if image_descriptions:
+                    combined_text += "\n\nIMAGE DESCRIPTIONS:\n" + "\n\n".join(image_descriptions)
+                
+                # Extract headings from HTML
+                headings = extract_headings_from_html(html)
+                heading = headings[0] if headings else ""
+                
+                # Create the document entry
+                documents.append({
+                    "content": combined_text,
+                    "metadata": {
+                        "source": filename,
+                        "page": i + 1,
+                        "heading": heading,
+                        "has_images": len(image_descriptions) > 0,
+                        "image_count": len(image_descriptions)
+                    }
+                })
+                
+                if verbose:
+                    logger.info(f"  Processed page {i+1}: {len(combined_text)} chars, {len(image_descriptions)} images")
+                
+            except Exception as e:
+                if verbose:
+                    logger.error(f"  Error processing page {i+1}: {str(e)}")
+                documents.append({
+                    "content": f"[PDF PROCESSING ERROR: {str(e)}]",
+                    "metadata": {
+                        "source": filename,
+                        "page": i + 1,
+                        "heading": "ERROR_PAGE"
+                    }
+                })
+        
     except Exception as e:
         if verbose:
-            print(f"  Error extracting tables from {filename}: {str(e)}")
+            logger.error(f"  Failed to process PDF: {str(e)}")
+        documents.append({
+            "content": f"[FAILED TO PROCESS PDF: {str(e)}]",
+            "metadata": {
+                "source": filename,
+                "page": 0,
+                "heading": "ERROR_DOCUMENT"
+            }
+        })
     
-    return tables_data
-
+    return documents
 
 def chunk_documents(documents):
+    """Split documents into smaller chunks for better retrieval."""
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        separators=["\n\n", "\n", ".", " ", ""]
+    )
+    
     chunked_documents = []
     
     for doc in documents:
-        # Use a page-aware chunking strategy
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CHUNK_SIZE,
-            chunk_overlap=CHUNK_OVERLAP,
-            separators=["\n\n", "\n", ".", " ", ""]
-        )
-        
         chunks = text_splitter.split_text(doc["content"])
-        
         for chunk in chunks:
             chunked_documents.append({
                 "content": chunk,
-                "metadata": doc["metadata"].copy()  # Ensure we don't have reference issues
+                "metadata": doc["metadata"].copy()
             })
     
     return chunked_documents
 
-
 def process_directory(directory_path=DOCS_DIR, verbose=True):
-    """Process all PDFs in a directory, extracting text, tables, and chunking."""
+    """Process all PDFs in a directory using LLaVA for image analysis."""
     all_documents = []
     processed_files = 0
     failed_files = 0
     
     if not os.path.exists(directory_path):
-        print(f"Directory {directory_path} does not exist.")
+        logger.error(f"Directory {directory_path} does not exist.")
         return all_documents
     
     pdf_files = [f for f in os.listdir(directory_path) if f.lower().endswith('.pdf')]
     
     if not pdf_files:
-        print(f"No PDF files found in {directory_path}")
+        logger.warning(f"No PDF files found in {directory_path}")
         return all_documents
     
-    print(f"Found {len(pdf_files)} PDF files to process.")
+    logger.info(f"Found {len(pdf_files)} PDF files to process.")
     
     for filename in pdf_files:
         file_path = os.path.join(directory_path, filename)
-        print(f"Processing {filename}...")
+        logger.info(f"Processing {filename}...")
         
         try:
-            # Extract text and layout
-            documents = extract_text_with_layout(file_path, verbose=verbose)
+            # Extract text and analyze images with LLaVA
+            start_time = time.time()
+            documents = extract_text_with_llava(file_path, verbose=verbose)
             
-            # Extract tables
-            tables = extract_tables_from_pdf(file_path, verbose=verbose)
-            
-            # Combine all extracted content
-            combined_docs = documents + tables
-            
-            if combined_docs:
-                all_documents.extend(combined_docs)
-                print(f"  Successfully extracted {len(documents)} document chunks and {len(tables)} tables")
+            if documents:
+                all_documents.extend(documents)
+                processing_time = time.time() - start_time
+                logger.info(f"  Successfully extracted {len(documents)} document chunks in {processing_time:.2f} seconds")
                 processed_files += 1
             else:
-                print(f"  No content extracted from {filename}")
+                logger.warning(f"  No content extracted from {filename}")
                 failed_files += 1
                 
         except Exception as e:
-            print(f"  Failed to process {filename}: {str(e)}")
+            logger.error(f"  Failed to process {filename}: {str(e)}")
             failed_files += 1
     
-    print(f"Processing complete: {processed_files} files processed successfully, {failed_files} files failed")
+    logger.info(f"Processing complete: {processed_files} files processed successfully, {failed_files} files failed")
     
     # Save the extracted documents
     os.makedirs(PROCESSED_DIR, exist_ok=True)
@@ -364,6 +358,10 @@ def process_directory(directory_path=DOCS_DIR, verbose=True):
     with open(os.path.join(PROCESSED_DIR, "chunked_docs.pkl"), "wb") as f:
         pickle.dump(chunked_docs, f)
     
-    print(f"Created {len(chunked_docs)} chunks from {len(all_documents)} documents/tables")
+    logger.info(f"Created {len(chunked_docs)} chunks from {len(all_documents)} documents")
     
     return chunked_docs
+
+if __name__ == "__main__":
+    chunked_docs = process_directory()
+    logger.info(f"Processed {len(chunked_docs)} total chunks")

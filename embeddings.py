@@ -1,13 +1,27 @@
 # embeddings.py
 """
-Generate embeddings and setup vector database for SMC Documentation Q&A system
+Generate embeddings and setup vector database for SMC Documentation Q&A system.
 """
 import os
 import pickle
-import numpy as np
 import chromadb
 from chromadb.utils import embedding_functions
-from config import PROCESSED_DIR, CHROMA_DB_DIR, EMBEDDING_MODEL
+import logging
+from tqdm import tqdm
+
+# Import configuration
+from config import (
+    PROCESSED_DIR, CHROMA_DB_DIR, EMBEDDING_MODEL,
+    COLLECTION_NAME
+)
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler("embeddings.log"), logging.StreamHandler()]
+)
+logger = logging.getLogger("embeddings")
 
 def generate_embeddings(documents):
     """Generate embeddings for text chunks using a local model."""
@@ -19,10 +33,10 @@ def generate_embeddings(documents):
     # Using the model specified in config
     model = SentenceTransformer(EMBEDDING_MODEL)
     
-    print(f"Generating embeddings for {len(documents)} chunks using {EMBEDDING_MODEL}...")
+    logger.info(f"Generating embeddings for {len(documents)} chunks using {EMBEDDING_MODEL}...")
     
     embeddings = []
-    for doc in documents:
+    for doc in tqdm(documents, desc="Generating embeddings"):
         embedding = model.encode(doc["content"])
         embeddings.append(embedding)
     
@@ -30,9 +44,8 @@ def generate_embeddings(documents):
     with open(os.path.join(PROCESSED_DIR, "embeddings.pkl"), "wb") as f:
         pickle.dump(embeddings, f)
     
-    print(f"Generated and saved {len(embeddings)} embeddings")
+    logger.info(f"Generated and saved {len(embeddings)} embeddings")
     return embeddings
-
 
 def setup_vector_db(documents, embeddings):
     """Set up a ChromaDB collection with documents and embeddings."""
@@ -46,7 +59,7 @@ def setup_vector_db(documents, embeddings):
     
     # Create or get collection
     collection = client.get_or_create_collection(
-        name="smc_documentation",
+        name=COLLECTION_NAME,
         embedding_function=embedding_function
     )
     
@@ -63,9 +76,8 @@ def setup_vector_db(documents, embeddings):
         embeddings=embeddings
     )
     
-    print(f"Added {len(documents)} documents to ChromaDB")
+    logger.info(f"Added {len(documents)} documents to ChromaDB collection '{COLLECTION_NAME}'")
     return collection
-
 
 def process_embeddings_and_db():
     """Load documents, generate embeddings, and setup vector database."""
@@ -83,7 +95,7 @@ def process_embeddings_and_db():
     # Check if embeddings already exist
     embeddings_path = os.path.join(PROCESSED_DIR, "embeddings.pkl")
     if os.path.exists(embeddings_path):
-        print(f"Loading existing embeddings from {embeddings_path}")
+        logger.info(f"Loading existing embeddings from {embeddings_path}")
         with open(embeddings_path, "rb") as f:
             embeddings = pickle.load(f)
     else:
@@ -91,7 +103,7 @@ def process_embeddings_and_db():
         embeddings = generate_embeddings(chunked_docs)
     
     # Setup ChromaDB
-    print(f"Setting up ChromaDB with {len(chunked_docs)} documents...")
+    logger.info(f"Setting up ChromaDB with {len(chunked_docs)} documents...")
     collection = setup_vector_db(chunked_docs, embeddings)
     
     # Test query
@@ -100,10 +112,13 @@ def process_embeddings_and_db():
         n_results=2
     )
     
-    print("\nTest query results:")
+    logger.info("\nTest query results:")
     for i, (doc, metadata) in enumerate(zip(results["documents"][0], results["metadatas"][0])):
-        print(f"Result {i+1}:")
-        print(f"Source: {metadata['source']}, Page: {metadata['page']}")
-        print(f"Content: {doc[:150]}...\n")
+        logger.info(f"Result {i+1}:")
+        logger.info(f"Source: {metadata['source']}, Page: {metadata['page']}")
+        logger.info(f"Content: {doc[:150]}...\n")
     
     return collection
+
+if __name__ == "__main__":
+    collection = process_embeddings_and_db()

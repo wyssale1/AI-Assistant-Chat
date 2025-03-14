@@ -1,7 +1,6 @@
-# config.py (updated with LLaVA support)
+# config.py
 """
 Central configuration file for SMC Documentation Q&A System
-Now with multimodal LLaVA support
 """
 import os
 from dotenv import load_dotenv
@@ -29,16 +28,15 @@ EXTRACT_IMAGES = os.getenv("EXTRACT_IMAGES", "True").lower() in ("true", "1", "t
 IMAGE_MIN_SIZE = int(os.getenv("IMAGE_MIN_SIZE", "100"))  # Minimum width/height to extract
 OCR_ENABLED = os.getenv("OCR_ENABLED", "True").lower() in ("true", "1", "t")
 
-# LLaVA multimodal settings
-USE_LLAVA = os.getenv("USE_LLAVA", "True").lower() in ("true", "1", "t")
+# LLaVA settings for document pre-processing
 LLAVA_MODEL = os.getenv("LLAVA_MODEL", "llava")
 LLAVA_URL = os.getenv("LLAVA_URL", "http://localhost:11434/api/generate")
 LLAVA_TEMPERATURE = float(os.getenv("LLAVA_TEMPERATURE", "0.2"))
 LLAVA_CONTEXT_SIZE = int(os.getenv("LLAVA_CONTEXT_SIZE", "1000"))  # Text context size around images
 
-# Ollama LLM settings
+# Ollama LLM settings for chat
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "phi4")  # Default model
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "phi4")  # Default model for chat
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.3"))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "1000"))
 LLM_TOP_P = float(os.getenv("LLM_TOP_P", "0.9"))
@@ -67,25 +65,20 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "180"))  # Timeout for API requests in seconds
 
 # Collection name for vector database
-if USE_LLAVA:
-    COLLECTION_NAME = "smc_documentation_llava"
-else:
-    COLLECTION_NAME = "smc_documentation"
+COLLECTION_NAME = "smc_documentation"
 
-# Default .env file template (updated with LLaVA settings)
+# Default .env file template
 DEFAULT_ENV_TEMPLATE = """# SMC Documentation Q&A System Configuration
 # ------------------------------------------
 
-# LLM Configuration
-OLLAMA_URL=http://localhost:11434/api/generate
+# LLaVA for Document Pre-processing
+LLAVA_MODEL=llava
+LLAVA_TEMPERATURE=0.2
+
+# Phi-4 for Chat
 OLLAMA_MODEL=phi4
 LLM_TEMPERATURE=0.3
 LLM_MAX_TOKENS=1000
-
-# LLaVA Multimodal Configuration
-USE_LLAVA=true
-LLAVA_MODEL=llava
-LLAVA_TEMPERATURE=0.2
 
 # Retrieval Settings
 SEARCH_TOP_K=5
