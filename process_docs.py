@@ -7,7 +7,7 @@ import os
 import sys
 import argparse
 import time
-from config import DOCS_DIR, PROCESSED_DIR, QA_METHOD
+from config import DOCS_DIR, PROCESSED_DIR, OLLAMA_MODEL
 
 def check_dependencies():
     """Check if all required dependencies are installed."""
@@ -97,7 +97,7 @@ def run_pipeline(skip_processing=False, skip_embeddings=False, force=False):
     print("\nPROCESSING PIPELINE COMPLETE")
     print("-" * 60)
     print(f"Total processing time: {elapsed_time:.2f} seconds")
-    print(f"QA Method: {QA_METHOD}")
+    print(f"LLM: Ollama with {OLLAMA_MODEL} model")
     print("\nTo start the web application, run:")
     print("    python app.py")
     
@@ -129,19 +129,21 @@ def verify_setup():
             # Create requirements.txt if it doesn't exist
             if not os.path.exists("requirements.txt"):
                 with open("requirements.txt", "w") as f:
-                    f.write("""flask==2.3.3
-python-dotenv==1.0.0
-chromadb==0.4.18
-sentence-transformers==2.2.2
-pypdf==3.17.1
-langchain==0.0.267
-requests==2.31.0
-pymupdf==1.22.5
-pytesseract==0.3.10
-pillow==10.0.0
-pdf2image==1.16.3
-tabula-py==2.7.0
-pandas==2.0.3""")
+                    f.write("""flask>=2.3.3
+python-dotenv>=1.0.0
+chromadb>=0.4.18
+sentence-transformers>=2.2.2
+pypdf>=3.17.1
+langchain>=0.0.267
+requests>=2.31.0
+pymupdf>=1.22.5
+pytesseract>=0.3.10
+pillow>=10.1.0
+pdf2image>=1.16.3
+tabula-py>=2.7.0
+pandas>=2.0.3
+tqdm>=4.66.1
+pydantic>=2.0.0""")
             
             print("Installing missing dependencies...")
             try:
@@ -170,6 +172,33 @@ pandas==2.0.3""")
             print("  sudo apt-get install tesseract-ocr")
         elif platform.system() == "Windows":
             print("  Download from: https://github.com/UB-Mannheim/tesseract/wiki")
+    
+    # Check for Ollama
+    try:
+        import requests
+        response = requests.get("http://localhost:11434/api/tags", timeout=2)
+        if response.status_code == 200:
+            models = response.json()
+            print(f"Ollama: Installed and running")
+            print(f"Available models: {', '.join([m['name'] for m in models.get('models', [])])}")
+            
+            # Check if the configured model is available
+            available_models = [m['name'] for m in models.get('models', [])]
+            if OLLAMA_MODEL not in available_models:
+                print(f"WARNING: Configured model '{OLLAMA_MODEL}' is not installed.")
+                print(f"Please install it with: ollama pull {OLLAMA_MODEL}")
+        else:
+            print("Ollama: Service is not responding properly")
+    except:
+        print("Ollama: Not running or not installed")
+        print("For LLM functionality, please install Ollama:")
+        if platform.system() == "Darwin":  # macOS
+            print("  curl -fsSL https://ollama.com/install.sh | sh")
+        elif platform.system() == "Windows":
+            print("  Download from: https://ollama.com/download/windows")
+        else:
+            print("  curl -fsSL https://ollama.com/install.sh | sh")
+        print(f"And then pull the phi4 model: ollama pull {OLLAMA_MODEL}")
     
     print("\nSetup verification complete.")
     return True
