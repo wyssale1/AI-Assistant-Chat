@@ -1,7 +1,7 @@
-# config.py
+# config.py (updated with LLaVA support)
 """
 Central configuration file for SMC Documentation Q&A System
-Focused on Ollama LLM integration
+Now with multimodal LLaVA support
 """
 import os
 from dotenv import load_dotenv
@@ -10,13 +10,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Paths
-DOCS_DIR = "docs"
-PROCESSED_DIR = "processed_docs"
-CHROMA_DB_DIR = "./chroma_db"
-STATIC_DIR = "static"
-TEMPLATES_DIR = "templates"
-CACHE_DIR = "response_cache"
-LOG_DIR = "logs"
+DOCS_DIR = os.getenv("DOCS_DIR", "docs")
+PROCESSED_DIR = os.getenv("PROCESSED_DIR", "processed_docs")
+CHROMA_DB_DIR = os.getenv("CHROMA_DB_DIR", "./chroma_db")
+STATIC_DIR = os.getenv("STATIC_DIR", "static")
+TEMPLATES_DIR = os.getenv("TEMPLATES_DIR", "templates")
+CACHE_DIR = os.getenv("CACHE_DIR", "response_cache")
+LOG_DIR = os.getenv("LOG_DIR", "logs")
 
 # Create directories if they don't exist
 for dir_path in [DOCS_DIR, PROCESSED_DIR, STATIC_DIR, TEMPLATES_DIR, CACHE_DIR, LOG_DIR]:
@@ -28,6 +28,13 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 EXTRACT_IMAGES = os.getenv("EXTRACT_IMAGES", "True").lower() in ("true", "1", "t")
 IMAGE_MIN_SIZE = int(os.getenv("IMAGE_MIN_SIZE", "100"))  # Minimum width/height to extract
 OCR_ENABLED = os.getenv("OCR_ENABLED", "True").lower() in ("true", "1", "t")
+
+# LLaVA multimodal settings
+USE_LLAVA = os.getenv("USE_LLAVA", "True").lower() in ("true", "1", "t")
+LLAVA_MODEL = os.getenv("LLAVA_MODEL", "llava")
+LLAVA_URL = os.getenv("LLAVA_URL", "http://localhost:11434/api/generate")
+LLAVA_TEMPERATURE = float(os.getenv("LLAVA_TEMPERATURE", "0.2"))
+LLAVA_CONTEXT_SIZE = int(os.getenv("LLAVA_CONTEXT_SIZE", "1000"))  # Text context size around images
 
 # Ollama LLM settings
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
@@ -57,9 +64,15 @@ PORT = int(os.getenv("PORT", "5000"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 # Performance settings
-REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "180"))  # Timeout for Ollama API requests in seconds
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "180"))  # Timeout for API requests in seconds
 
-# Default .env file template
+# Collection name for vector database
+if USE_LLAVA:
+    COLLECTION_NAME = "smc_documentation_llava"
+else:
+    COLLECTION_NAME = "smc_documentation"
+
+# Default .env file template (updated with LLaVA settings)
 DEFAULT_ENV_TEMPLATE = """# SMC Documentation Q&A System Configuration
 # ------------------------------------------
 
@@ -68,6 +81,11 @@ OLLAMA_URL=http://localhost:11434/api/generate
 OLLAMA_MODEL=phi4
 LLM_TEMPERATURE=0.3
 LLM_MAX_TOKENS=1000
+
+# LLaVA Multimodal Configuration
+USE_LLAVA=true
+LLAVA_MODEL=llava
+LLAVA_TEMPERATURE=0.2
 
 # Retrieval Settings
 SEARCH_TOP_K=5
