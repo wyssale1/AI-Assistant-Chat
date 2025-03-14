@@ -285,21 +285,22 @@ def extract_tables_from_pdf(pdf_path, verbose=True):
 
 
 def chunk_documents(documents):
-    """Split documents into smaller chunks for better retrieval."""
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        separators=["\n\n", "\n", ".", " ", ""]
-    )
-    
     chunked_documents = []
     
     for doc in documents:
+        # Use a page-aware chunking strategy
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=CHUNK_OVERLAP,
+            separators=["\n\n", "\n", ".", " ", ""]
+        )
+        
         chunks = text_splitter.split_text(doc["content"])
+        
         for chunk in chunks:
             chunked_documents.append({
                 "content": chunk,
-                "metadata": doc["metadata"]
+                "metadata": doc["metadata"].copy()  # Ensure we don't have reference issues
             })
     
     return chunked_documents

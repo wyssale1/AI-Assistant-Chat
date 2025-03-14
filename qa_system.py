@@ -99,22 +99,25 @@ def get_relevant_context(query, n_results=N_RESULTS, rerank=True):
         return []
 
 def format_context_for_llm(context, max_length=CONTEXT_WINDOW):
-    """Format context data for the LLM prompt with smart truncation."""
+    """Format context data for the LLM prompt with smart truncation and improved source tracking."""
     formatted_chunks = []
     total_length = 0
     
-    # First pass: format all chunks with metadata
+    # First pass: format all chunks with metadata and clear boundaries
     for i, ctx in enumerate(context):
-        chunk = f"Document: {ctx['source']}, Page: {ctx['page']}\n"
+        # Format each chunk with clear section boundaries
+        chunk = f"--- START EXCERPT FROM {ctx['source']}, PAGE {ctx['page']} ---\n"
+        
         if ctx.get("heading"):
-            chunk += f"Section: {ctx['heading']}\n"
+            chunk += f"SECTION: {ctx['heading']}\n"
         
         # Truncate very long content chunks
         content = ctx['content']
         if len(content) > 1500:
             content = content[:1450] + "... [content truncated]"
             
-        chunk += f"{content}\n\n"
+        chunk += f"{content}\n"
+        chunk += f"--- END EXCERPT FROM {ctx['source']}, PAGE {ctx['page']} ---\n\n"
         
         # Add to our list with relevance as priority
         formatted_chunks.append({
@@ -144,18 +147,17 @@ def format_context_for_llm(context, max_length=CONTEXT_WINDOW):
     return context_text
 
 def generate_llm_prompt(query, context_text):
-    """Generate a well-structured prompt for the LLM."""
     return f"""You are a precise, helpful assistant for SMC device documentation. 
 Your task is to answer the user's question about SMC devices by carefully analyzing the provided context.
 
 INSTRUCTION GUIDELINES:
-1. Answer ONLY based on the information in the context below
+1. Answer ONLY based on the information in the provided context
 2. If the answer isn't in the context, say "I don't have enough information about that in the documentation."
-3. ALWAYS cite your sources with document names and page numbers after each relevant piece of information
-4. Be direct and concise in your answers
-5. If context contains conflicting information, acknowledge it and explain the discrepancy
-6. When providing steps or procedures, use numbered lists
-7. Format your answer for clarity
+3. VERY IMPORTANT: When citing sources, ONLY use the exact page numbers as provided in the context excerpts
+4. Each excerpt is clearly marked with "START EXCERPT FROM [document], PAGE [number]"
+5. When including information from an excerpt, cite it as ([document], Page [number])
+6. Be direct and concise in your answers
+7. When providing steps or procedures, use numbered lists
 
 CONTEXT:
 {context_text}
@@ -310,24 +312,26 @@ def answer_with_local_llm(query, context=None):
         return error_msg, context
 
 def post_process_answer(answer, context):
-    """Clean up and improve the LLM's answer."""
-    # Ensure proper citation format
+    """Clean up and improve the LLM's answer with better citation handling."""
+    # Create a mapping of source document to pages
+    source_pages = {}
     for ctx in context:
         source = ctx['source']
         page = ctx['page']
-        
-        # Check if source is mentioned but not properly formatted
-        if source in answer and f"({source}, Page {page})" not in answer:
-            # Try to add the page number where the source is mentioned
-            answer = answer.replace(f"{source}", f"{source}, Page {page}")
+        if source not in source_pages:
+            source_pages[source] = set()
+        source_pages[source].add(page)
     
-    # Sometimes the model repeats "I don't have enough information"
-    if answer.count("I don't have enough information") > 1:
-        # Keep only the first instance
-        first_idx = answer.find("I don't have enough information")
-        end_idx = answer.find("\n", first_idx)
-        if end_idx > 0:
-            answer = answer[:end_idx]
+    # Add a clean source summary at the end
+    sources_summary = "\n\n**Sources:**"
+    for source, pages in source_pages.items():
+        sources_summary += f"\n**{source}**"
+        for page in sorted(pages):
+            sources_summary += f"\n* Page {page}"
+    
+    # Append the sources summary to the answer
+    if "Sources:" not in answer:
+        answer += sources_summary
     
     return answer
 
