@@ -7,7 +7,6 @@ import os
 import json
 import time
 import logging
-from dotenv import load_dotenv
 
 from qa_system import answer_with_local_llm, get_relevant_context
 from config import (
@@ -22,9 +21,6 @@ logging.basicConfig(
     handlers=[logging.FileHandler("app.log"), logging.StreamHandler()]
 )
 logger = logging.getLogger("app")
-
-# Load environment variables
-load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
