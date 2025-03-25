@@ -30,20 +30,28 @@ const InputArea: React.FC<InputAreaProps> = ({
     }
   };
   
+  // Determine if button should be active based on input
+  const isActive = inputValue.trim().length > 0;
+  
   return (
-    <div className="sticky bottom-0 bg-background p-5 border-t border-border-color z-10">
+    <div className="sticky bottom-0 bg-white p-4 border-t border-gray-200 z-10">
       <form onSubmit={handleSubmit} className="flex py-2">
         <input
           ref={inputRef}
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          className="flex-1 p-3 border border-border-color rounded-full mr-2 text-base outline-none focus:border-accent focus:shadow-[0_0_0_2px_rgba(33,150,243,0.2)]"
+          className="flex-1 p-3 border border-gray-300 rounded-full mr-2 text-base outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
           placeholder="Ask about SMC devices..."
         />
         <button
           type="submit"
-          className="p-3 px-5 bg-accent text-white border-none rounded-full cursor-pointer hover:bg-blue-600 transition-colors"
+          disabled={!isActive}
+          className={`p-3 px-5 border-none rounded-full cursor-pointer transition-colors ${
+            isActive 
+              ? 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700' 
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }`}
         >
           <Send size={18} />
         </button>

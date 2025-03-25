@@ -25,23 +25,23 @@ const Header: React.FC<HeaderProps> = ({ modelName = 'phi4' }) => {
         
         if (data.ollama === 'online' && data.vectordb === 'online') {
           setStatus({
-            dot: 'bg-success',
+            dot: 'bg-green-500',
             text: 'Online',
           });
         } else if (data.ollama === 'online' || data.vectordb === 'online') {
           setStatus({
-            dot: 'bg-warning',
+            dot: 'bg-yellow-500',
             text: 'Partial',
           });
         } else {
           setStatus({
-            dot: 'bg-error',
+            dot: 'bg-red-500',
             text: 'Offline',
           });
         }
       } catch (error) {
         setStatus({
-          dot: 'bg-error',
+          dot: 'bg-red-500',
           text: 'Error',
         });
       }
@@ -54,14 +54,14 @@ const Header: React.FC<HeaderProps> = ({ modelName = 'phi4' }) => {
   }, [checkSystemStatus]);
 
   return (
-    <header className="sticky top-0 h-20 bg-background z-10 flex justify-between items-center px-5 border-b border-border-color flex-wrap">
-      <h1 className="text-primary text-2xl font-bold flex-1">SMC Documentation Assistant</h1>
-      <div className="flex items-center bg-card-bg py-2 px-4 rounded-full shadow-custom">
-        <span className="text-primary mr-2"><Bot size={20} /></span>
-        <span className="font-semibold text-primary">{modelName}</span>
+    <header className="py-4 px-5 border-b border-gray-200 flex justify-between items-center">
+      <h1 className="text-blue-600 text-xl font-semibold">SMC Documentation Assistant</h1>
+      <div className="flex items-center bg-white py-2 px-4 rounded-full shadow-sm border border-gray-100">
+        <span className="text-blue-600 mr-2"><Bot size={18} /></span>
+        <span className="font-medium text-gray-700">{modelName}</span>
         <div className="flex items-center ml-4 text-sm">
-          <span className={`w-2.5 h-2.5 rounded-full ${status.dot} mr-1`}></span>
-          <span className="text-text-secondary">{status.text}</span>
+          <span className={`w-2 h-2 rounded-full ${status.dot} mr-1`}></span>
+          <span className="text-gray-500">{status.text}</span>
         </div>
       </div>
     </header>

@@ -6,7 +6,6 @@ import Footer from './components/Footer';
 import useAPI from './hooks/useAPI';
 import { Message } from './types';
 
-
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [lastQuery, setLastQuery] = useState<string>('');
@@ -81,16 +80,18 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen max-w-6xl mx-auto">
-      <Header />
-      <ChatContainer messages={messages} />
-      <InputArea 
-        onSendMessage={handleSendMessage} 
-        showFeedback={showFeedback}
-        onSubmitFeedback={handleSubmitFeedback}
-        onCloseFeedback={handleCloseFeedback}
-      />
-      <Footer />
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-4xl mx-auto flex flex-col h-screen bg-white shadow-lg">
+        <Header />
+        <ChatContainer messages={messages} />
+        <InputArea 
+          onSendMessage={handleSendMessage} 
+          showFeedback={showFeedback}
+          onSubmitFeedback={handleSubmitFeedback}
+          onCloseFeedback={handleCloseFeedback}
+        />
+        <Footer />
+      </div>
     </div>
   );
 }

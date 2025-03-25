@@ -29,14 +29,14 @@ const Footer: React.FC = () => {
   }, [checkSystemStatus]);
 
   return (
-    <footer className="bg-background py-2 px-5 border-t border-border-color h-15">
-      <div className="flex justify-between text-text-secondary text-sm flex-wrap">
+    <footer className="bg-gray-50 py-2 px-5 border-t border-gray-200">
+      <div className="flex justify-between text-gray-500 text-sm flex-wrap">
         <div className="flex items-center my-1">
-          <Info size={16} className="mr-2" />
+          <Info size={14} className="mr-2" />
           <span>Ask questions about SMC documentation to get detailed answers with source references.</span>
         </div>
         <div className="flex items-center my-1">
-          <Server size={16} className="mr-2" />
+          <Server size={14} className="mr-2" />
           <span>System Status: {systemInfo}</span>
         </div>
       </div>
