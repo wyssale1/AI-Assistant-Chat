@@ -2,11 +2,12 @@
 """
 Flask web application for SMC Documentation Q&A System.
 """
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import os
 import json
 import time
 import logging
+import werkzeug
 
 from qa_system import answer_with_local_llm, get_relevant_context
 from config import (
@@ -22,13 +23,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger("app")
 
+# Filter out frequent status endpoint requests from the werkzeug logger
+class StatusEndpointFilter(logging.Filter):
+    def filter(self, record):
+        return not (record.getMessage().find('/status') != -1 and record.levelname == 'INFO')
+
+# Apply the filter to werkzeug logger
+werkzeug_logger = logging.getLogger("werkzeug")
+werkzeug_logger.addFilter(StatusEndpointFilter())
+
 # Initialize Flask app
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    """Render the main page."""
-    return render_template('index.html', model=OLLAMA_MODEL)
+# Main route - serve React app
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react(path):
+    """Serve React frontend."""
+    if path != "" and os.path.exists(os.path.join(app.static_folder, "react", path)):
+        return send_from_directory(os.path.join(app.static_folder, "react"), path)
+    return send_from_directory(os.path.join(app.static_folder, "react"), "index.html")
 
 @app.route('/ask', methods=['POST'])
 def ask():
