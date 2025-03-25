@@ -172,3 +172,13 @@ if __name__ == '__main__':
     logger.info(f"Using LLaVA model for document processing: {LLAVA_MODEL}")
     logger.info(f"Vector database collection: {COLLECTION_NAME}")
     app.run(debug=DEBUG_MODE, host=HOST, port=PORT)
+# Serve React frontend
+from flask import send_from_directory
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_react(path):
+    """Serve React frontend."""
+    if path != "" and os.path.exists(os.path.join(app.static_folder, "react", path)):
+        return send_from_directory(os.path.join(app.static_folder, "react"), path)
+    return send_from_directory(os.path.join(app.static_folder, "react"), "index.html")
