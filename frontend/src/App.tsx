@@ -80,8 +80,8 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto flex flex-col h-screen bg-white shadow-lg">
+    <div className="min-h-screen w-full bg-gray-50 flex">
+      <div className="w-full max-w-4xl mx-auto flex flex-col h-screen bg-white shadow-lg">
         <Header />
         <ChatContainer messages={messages} />
         <InputArea 

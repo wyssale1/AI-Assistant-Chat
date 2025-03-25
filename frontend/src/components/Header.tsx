@@ -54,10 +54,10 @@ const Header: React.FC<HeaderProps> = ({ modelName = 'phi4' }) => {
   }, [checkSystemStatus]);
 
   return (
-    <header className="py-4 px-5 border-b border-gray-200 flex justify-between items-center">
-      <h1 className="text-blue-600 text-xl font-semibold">SMC Documentation Assistant</h1>
+    <header className="py-3 px-5 border-b border-gray-200 flex justify-between items-center">
+      <h1 className="text-blue-600 text-base font-medium">SMC Documentation Assistant</h1>
       <div className="flex items-center bg-white py-2 px-4 rounded-full shadow-sm border border-gray-100">
-        <span className="text-blue-600 mr-2"><Bot size={18} /></span>
+        <span className="text-blue-600 mr-2"><Bot size={16} /></span>
         <span className="font-medium text-gray-700">{modelName}</span>
         <div className="flex items-center ml-4 text-sm">
           <span className={`w-2 h-2 rounded-full ${status.dot} mr-1`}></span>
