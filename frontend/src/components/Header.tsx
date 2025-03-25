@@ -48,8 +48,7 @@ const Header: React.FC<HeaderProps> = ({ modelName = 'phi4' }) => {
     };
 
     fetchStatus();
-    // Refresh status every 60 seconds
-    const interval = setInterval(fetchStatus, 60000);
+    const interval = setInterval(fetchStatus, 300000);
     return () => clearInterval(interval);
   }, [checkSystemStatus]);
 

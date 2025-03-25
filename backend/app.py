@@ -7,6 +7,7 @@ import os
 import json
 import time
 import logging
+import werkzeug
 
 from qa_system import answer_with_local_llm, get_relevant_context
 from config import (
@@ -21,6 +22,15 @@ logging.basicConfig(
     handlers=[logging.FileHandler("app.log"), logging.StreamHandler()]
 )
 logger = logging.getLogger("app")
+
+# Filter out frequent status endpoint requests from the werkzeug logger
+class StatusEndpointFilter(logging.Filter):
+    def filter(self, record):
+        return not (record.getMessage().find('/status') != -1 and record.levelname == 'INFO')
+
+# Apply the filter to werkzeug logger
+werkzeug_logger = logging.getLogger("werkzeug")
+werkzeug_logger.addFilter(StatusEndpointFilter())
 
 # Initialize Flask app
 app = Flask(__name__)

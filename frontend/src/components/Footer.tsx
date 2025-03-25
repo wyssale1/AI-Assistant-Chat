@@ -26,6 +26,8 @@ const Footer: React.FC = () => {
     };
 
     fetchStatus();
+    const interval = setInterval(fetchStatus, 300000);
+    return () => clearInterval(interval);
   }, [checkSystemStatus]);
 
   return (
