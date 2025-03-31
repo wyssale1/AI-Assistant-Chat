@@ -1,4 +1,4 @@
-# SMC Documentation Q&A System
+# AI Documentation Q&A System
 
 A powerful documentation assistant that helps technical support staff quickly find information in SMC product documentation using advanced AI models.
 
